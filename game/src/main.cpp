@@ -29,15 +29,18 @@ Vector2 GetLaunchVelocity(float angleDeg, float speed)
     return { cosf(rad) * speed, -sinf(rad) * speed }; // -sin so positive angle aims upward
 }
 
-// ---------------- LAB 2 STRUCTURES ----------------
+// ---------------- LAB 2 + LAB 3 STRUCTURES ----------------
 struct PhysicsBody {
     Vector2 position;
     Vector2 velocity;
     float drag;
     float mass;
+    float radius;
+    Color color;
 
-    PhysicsBody(Vector2 pos, Vector2 vel, float d = 0.0f, float m = 1.0f)
-        : position(pos), velocity(vel), drag(d), mass(m) {}
+    PhysicsBody(Vector2 pos, Vector2 vel, float d = 0.0f, float m = 1.0f, float r = 8.0f)
+        : position(pos), velocity(vel), drag(d), mass(m), radius(r), color(GREEN) {
+    }
 };
 
 struct PhysicsSimulation {
@@ -46,7 +49,8 @@ struct PhysicsSimulation {
     Vector2 gravity;
 
     PhysicsSimulation(float dt = 1.0f / 60.0f, Vector2 g = { 0, 200 })
-        : deltaTime(dt), time(0), gravity(g) {}
+        : deltaTime(dt), time(0), gravity(g) {
+    }
 
     void UpdateBody(PhysicsBody& body) {
         // Apply gravity to velocity
@@ -66,6 +70,25 @@ std::vector<PhysicsBody> balls;
 void LaunchBall() {
     Vector2 velocity = GetLaunchVelocity(launchAngle, launchSpeed);
     balls.emplace_back(launchPosition, velocity);
+}
+
+// ---------------- COLLISION CHECK (LAB 3) ----------------
+void CheckCollisions(std::vector<PhysicsBody>& bodies) {
+    for (size_t i = 0; i < bodies.size(); i++) {
+        for (size_t j = i + 1; j < bodies.size(); j++) {
+            float distance = Vector2Distance(bodies[i].position, bodies[j].position);
+            float radiusSum = bodies[i].radius + bodies[j].radius;
+
+            if (distance < radiusSum) {
+                bodies[i].color = RED;
+                bodies[j].color = RED;
+            }
+            else {
+                bodies[i].color = GREEN;
+                bodies[j].color = GREEN;
+            }
+        }
+    }
 }
 
 // ---------------- UPDATE ----------------
@@ -88,6 +111,9 @@ void update()
     for (auto& ball : balls) {
         sim.UpdateBody(ball);
     }
+
+    // Lab 3 collision check
+    CheckCollisions(balls);
 }
 
 // ---------------- DRAW ----------------
@@ -121,9 +147,9 @@ void draw()
     DrawText(TextFormat("Velocity: (%.1f, %.1f)", velocity.x, velocity.y), 10, 200, 20, LIGHTGRAY);
     DrawText("Press SPACE to launch balls", 10, 225, 20, LIGHTGRAY);
 
-    // Draw all launched balls (Lab 2)
+    // Draw all launched balls (Lab 2 + Lab 3)
     for (auto& ball : balls) {
-        DrawCircleV(ball.position, 8, YELLOW);
+        DrawCircleV(ball.position, ball.radius, ball.color);
     }
 
     EndDrawing();
@@ -144,3 +170,4 @@ int main()
     CloseWindow();
     return 0;
 }
+
