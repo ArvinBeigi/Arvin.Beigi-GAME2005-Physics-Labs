@@ -72,7 +72,7 @@ void LaunchBall() {
     balls.emplace_back(launchPosition, velocity);
 }
 
-// ---------------- COLLISION CHECK (LAB 3) ----------------
+// ---------------- LAB 3 COLLISION CHECK ----------------
 void CheckCollisions(std::vector<PhysicsBody>& bodies) {
     for (size_t i = 0; i < bodies.size(); i++) {
         for (size_t j = i + 1; j < bodies.size(); j++) {
@@ -89,6 +89,24 @@ void CheckCollisions(std::vector<PhysicsBody>& bodies) {
             }
         }
     }
+}
+
+// ---------------- LAB 4 HALFSPACE STRUCT + COLLISION ----------------
+struct Halfspace {
+    Vector2 point;    // a point on the line/plane
+    Vector2 normal;   // direction pointing "inside"
+
+    Halfspace(Vector2 p = { 0, 500 }, Vector2 n = { 0, -1 }) {
+        point = p;
+        normal = Vector2Normalize(n);
+    }
+};
+
+Halfspace halfspace({ 0, 500 }, { 0, -1 }); // horizontal halfspace at y=500, pointing upward
+
+bool CheckSphereHalfspace(const PhysicsBody& sphere, const Halfspace& h) {
+    float distance = Vector2DotProduct(h.normal, Vector2Subtract(sphere.position, h.point));
+    return (distance < sphere.radius);
 }
 
 // ---------------- UPDATE ----------------
@@ -110,10 +128,15 @@ void update()
 
     for (auto& ball : balls) {
         sim.UpdateBody(ball);
-    }
 
-    // Lab 3 collision check
-    CheckCollisions(balls);
+        // Lab 3 sphere-sphere collisions
+        CheckCollisions(balls);
+
+        // Lab 4 sphere-halfspace collision
+        if (CheckSphereHalfspace(ball, halfspace)) {
+            ball.color = RED;
+        }
+    }
 }
 
 // ---------------- DRAW ----------------
@@ -147,10 +170,13 @@ void draw()
     DrawText(TextFormat("Velocity: (%.1f, %.1f)", velocity.x, velocity.y), 10, 200, 20, LIGHTGRAY);
     DrawText("Press SPACE to launch balls", 10, 225, 20, LIGHTGRAY);
 
-    // Draw all launched balls (Lab 2 + Lab 3)
+    // Draw all launched balls (Lab 2 + Lab 3 + Lab 4)
     for (auto& ball : balls) {
         DrawCircleV(ball.position, ball.radius, ball.color);
     }
+
+    // Draw halfspace line for visualization (Lab 4)
+    DrawLine(0, halfspace.point.y, GetScreenWidth(), halfspace.point.y, BLUE);
 
     EndDrawing();
 }
@@ -170,4 +196,3 @@ int main()
     CloseWindow();
     return 0;
 }
-
