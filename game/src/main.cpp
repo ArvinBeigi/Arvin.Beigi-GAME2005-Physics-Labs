@@ -10,8 +10,8 @@ See documentation here: https://www.raylib.com/, and examples here: https://www.
 #include "game.h"
 #include <vector>
 
-const unsigned int TARGET_FPS = 60; //frames/second
-float dt = 1.0f / TARGET_FPS; //seconds/frame
+const unsigned int TARGET_FPS = 60;
+float dt = 1.0f / TARGET_FPS;
 float time = 0;
 float x = 500;
 float y = 500;
@@ -19,30 +19,32 @@ float frequency = 1;
 float amplitude = 100;
 
 // ---------------- LAB 1 VARIABLES ----------------
-Vector2 launchPosition = { 400, 300 }; // Starting point
-float launchAngle = 45.0f;             // Degrees
-float launchSpeed = 200.0f;            // Pixels per second
+Vector2 launchPosition = { 400, 300 };
+float launchAngle = 45.0f;
+float launchSpeed = 200.0f;
 
 Vector2 GetLaunchVelocity(float angleDeg, float speed)
 {
     float rad = angleDeg * DEG2RAD;
-    return { cosf(rad) * speed, -sinf(rad) * speed }; // -sin so positive angle aims upward
+    return { cosf(rad) * speed, -sinf(rad) * speed };
 }
 
-// ---------------- LAB 2 + LAB 3 STRUCTURES ----------------
+// ---------------- PHYSICS BODY STRUCT ----------------
 struct PhysicsBody {
     Vector2 position;
     Vector2 velocity;
     float drag;
     float mass;
     float radius;
+    bool isFixed;
     Color color;
 
-    PhysicsBody(Vector2 pos, Vector2 vel, float d = 0.0f, float m = 1.0f, float r = 8.0f)
-        : position(pos), velocity(vel), drag(d), mass(m), radius(r), color(GREEN) {
+    PhysicsBody(Vector2 pos, Vector2 vel, float d = 0.0f, float m = 1.0f, float r = 8.0f, bool fixed = false)
+        : position(pos), velocity(vel), drag(d), mass(m), radius(r), isFixed(fixed), color(GREEN) {
     }
 };
 
+// ---------------- PHYSICS SIMULATION ----------------
 struct PhysicsSimulation {
     float deltaTime;
     float time;
@@ -53,13 +55,10 @@ struct PhysicsSimulation {
     }
 
     void UpdateBody(PhysicsBody& body) {
-        // Apply gravity to velocity
+        if (body.isFixed) return;
+
         body.velocity = Vector2Add(body.velocity, Vector2Scale(gravity, deltaTime));
-
-        // Apply drag if needed
         body.velocity = Vector2Scale(body.velocity, (1.0f - body.drag * deltaTime));
-
-        // Update position
         body.position = Vector2Add(body.position, Vector2Scale(body.velocity, deltaTime));
     }
 };
@@ -82,6 +81,16 @@ void CheckCollisions(std::vector<PhysicsBody>& bodies) {
             if (distance < radiusSum) {
                 bodies[i].color = RED;
                 bodies[j].color = RED;
+
+                // LAB 5 - COLLISION RESPONSE
+                float overlap = radiusSum - distance;
+                Vector2 normal = Vector2Normalize(Vector2Subtract(bodies[j].position, bodies[i].position));
+                Vector2 correction = Vector2Scale(normal, overlap / 2.0f);
+
+                if (!bodies[i].isFixed)
+                    bodies[i].position = Vector2Subtract(bodies[i].position, correction);
+                if (!bodies[j].isFixed)
+                    bodies[j].position = Vector2Add(bodies[j].position, correction);
             }
             else {
                 bodies[i].color = GREEN;
@@ -91,10 +100,10 @@ void CheckCollisions(std::vector<PhysicsBody>& bodies) {
     }
 }
 
-// ---------------- LAB 4 HALFSPACE STRUCT + COLLISION ----------------
+// ---------------- HALFSPACE STRUCT ----------------
 struct Halfspace {
-    Vector2 point;    // a point on the line/plane
-    Vector2 normal;   // direction pointing "inside"
+    Vector2 point;
+    Vector2 normal;
 
     Halfspace(Vector2 p = { 0, 500 }, Vector2 n = { 0, -1 }) {
         point = p;
@@ -102,11 +111,29 @@ struct Halfspace {
     }
 };
 
-Halfspace halfspace({ 0, 500 }, { 0, -1 }); // horizontal halfspace at y=500, pointing upward
+Halfspace halfspace({ 0, 500 }, { 0, -1 });
 
 bool CheckSphereHalfspace(const PhysicsBody& sphere, const Halfspace& h) {
     float distance = Vector2DotProduct(h.normal, Vector2Subtract(sphere.position, h.point));
     return (distance < sphere.radius);
+}
+
+// ---------------- LAB 5 - HALFSPACE RESPONSE ----------------
+void ResolveSphereHalfspace(PhysicsBody& sphere, const Halfspace& h) {
+    float distance = Vector2DotProduct(h.normal, Vector2Subtract(sphere.position, h.point));
+    float overlap = sphere.radius - distance;
+
+    if (overlap > 0 && !sphere.isFixed) {
+        sphere.color = RED;
+        sphere.position = Vector2Add(sphere.position, Vector2Scale(h.normal, overlap));
+
+        // Stop downward velocity on contact
+        if (Vector2DotProduct(h.normal, sphere.velocity) > 0)
+            sphere.velocity = Vector2Zero();
+    }
+    else {
+        sphere.color = GREEN;
+    }
 }
 
 // ---------------- UPDATE ----------------
@@ -115,11 +142,6 @@ void update()
     dt = 1.0f / TARGET_FPS;
     time += dt;
 
-    // Existing oscillating motion (Lab 1 demo)
-    x = x + (-sin(time * frequency)) * frequency * amplitude * dt;
-    y = y + (cos(time * frequency)) * frequency * amplitude * dt;
-
-    // Lab 2 simulation
     if (IsKeyPressed(KEY_SPACE)) {
         LaunchBall();
     }
@@ -128,14 +150,12 @@ void update()
 
     for (auto& ball : balls) {
         sim.UpdateBody(ball);
+    }
 
-        // Lab 3 sphere-sphere collisions
-        CheckCollisions(balls);
+    CheckCollisions(balls);
 
-        // Lab 4 sphere-halfspace collision
-        if (CheckSphereHalfspace(ball, halfspace)) {
-            ball.color = RED;
-        }
+    for (auto& ball : balls) {
+        ResolveSphereHalfspace(ball, halfspace);
     }
 }
 
@@ -147,14 +167,6 @@ void draw()
 
     DrawText("Arvin Beigi 101447957", 10, float(GetScreenHeight() - 30), 20, LIGHTGRAY);
 
-    // Existing GUI + visuals (Lab 1)
-    GuiSliderBar(Rectangle{ 10, 15, 1000, 20 }, "", TextFormat("%.2f", time), &time, 0, 240);
-    DrawText(TextFormat("T: %6.2f", time), GetScreenWidth() - 140, 10, 30, LIGHTGRAY);
-
-    DrawCircle(x, y, 70, RED);
-    DrawCircle(500 + cos(time * frequency) * amplitude, 500 + sin(time * frequency) * amplitude, 70, GREEN);
-
-    // --- Lab-specific controls and vector drawing ---
     GuiSliderBar({ 10, 60, 200, 20 }, "Angle", TextFormat("%.1f", launchAngle), &launchAngle, 0, 90);
     GuiSliderBar({ 10, 90, 200, 20 }, "Speed", TextFormat("%.1f", launchSpeed), &launchSpeed, 0, 400);
     GuiSliderBar({ 10, 120, 200, 20 }, "Gravity Y", TextFormat("%.1f", sim.gravity.y), &sim.gravity.y, -500, 500);
@@ -162,20 +174,18 @@ void draw()
     Vector2 velocity = GetLaunchVelocity(launchAngle, launchSpeed);
     Vector2 endPoint = Vector2Add(launchPosition, Vector2Scale(velocity, 0.2f));
 
-    DrawCircleV(launchPosition, 8, GREEN); // launch origin
-    DrawLineV(launchPosition, endPoint, RED); // initial velocity vector
+    DrawCircleV(launchPosition, 8, GREEN);
+    DrawLineV(launchPosition, endPoint, RED);
 
     DrawText(TextFormat("Angle: %.1f deg", launchAngle), 10, 150, 20, LIGHTGRAY);
     DrawText(TextFormat("Speed: %.1f", launchSpeed), 10, 175, 20, LIGHTGRAY);
     DrawText(TextFormat("Velocity: (%.1f, %.1f)", velocity.x, velocity.y), 10, 200, 20, LIGHTGRAY);
     DrawText("Press SPACE to launch balls", 10, 225, 20, LIGHTGRAY);
 
-    // Draw all launched balls (Lab 2 + Lab 3 + Lab 4)
     for (auto& ball : balls) {
         DrawCircleV(ball.position, ball.radius, ball.color);
     }
 
-    // Draw halfspace line for visualization (Lab 4)
     DrawLine(0, halfspace.point.y, GetScreenWidth(), halfspace.point.y, BLUE);
 
     EndDrawing();
@@ -187,7 +197,7 @@ int main()
     InitWindow(InitialWidth, InitialHeight, "GAME2005 Arvin Beigi 101447957");
     SetTargetFPS(TARGET_FPS);
 
-    while (!WindowShouldClose()) // Loops TARGET_FPS times per second
+    while (!WindowShouldClose())
     {
         update();
         draw();
