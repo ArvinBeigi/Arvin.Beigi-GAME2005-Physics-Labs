@@ -11,10 +11,12 @@ See documentation here: https://www.raylib.com/, and examples here: https://www.
 #include <vector>
 #include <cmath>
 
-// MODES:
-//   1 -> Labs 1–5 Angry Bird + collisions
-//   6 -> Lab 6 kinetic friction
-//   F -> Key Practice 2: Free Body Diagram (overrides view)
+
+// MODES
+// 1 -> Labs 1–5  (Angry Bird, collisions, separation)
+// 6 -> Lab 6     (Kinetic friction on a slope)
+// 7 -> Lab 7     (Collision response, bouncing, restitution)
+// F -> Key Practice 2 (Free Body Diagram)
 
 
 const unsigned int TARGET_FPS = 60;
@@ -22,7 +24,8 @@ const unsigned int TARGET_FPS = 60;
 enum SimulationMode
 {
     MODE_LABS = 0,
-    MODE_LAB6 = 1
+    MODE_LAB6 = 1,
+    MODE_LAB7 = 2
 };
 
 SimulationMode currentMode = MODE_LABS;
@@ -36,7 +39,7 @@ float Sign(float x)
     return 0.0f;
 }
 
-// Common arrow drawing helper
+// Shared arrow drawing helper
 void DrawArrow(Vector2 start, Vector2 end, Color c)
 {
     DrawLineV(start, end, c);
@@ -48,8 +51,8 @@ void DrawArrow(Vector2 start, Vector2 end, Color c)
     DrawLineV(end, Vector2Add(back, Vector2Scale(left, -5.0f)), c);
 }
 
-// LABS 1–5: Angry Bird, physics bodies, collision response
 
+// LABS 1–5: Angry Bird + Physics Bodies + Collision Response
 
 // Launch parameters
 Vector2 launchPosition = { 400, 300 };
@@ -121,7 +124,7 @@ void LaunchBall()
         GetLaunchVelocity(launchAngle, launchSpeed));
 }
 
-// Sphere–sphere overlap + Lab 5 separation
+// Sphere–sphere overlap + separation
 void CheckCollisions(std::vector<PhysicsBody>& bodies)
 {
     for (size_t i = 0; i < bodies.size(); ++i) {
@@ -154,7 +157,7 @@ void CheckCollisions(std::vector<PhysicsBody>& bodies)
     }
 }
 
-// Sphere–halfspace response
+// Sphere–halfspace response (ground)
 void ResolveSphereHalfspace(PhysicsBody& sphere, const Halfspace& h)
 {
     float distance = Vector2DotProduct(h.normal,
@@ -173,7 +176,6 @@ void ResolveSphereHalfspace(PhysicsBody& sphere, const Halfspace& h)
     }
 }
 
-// Labs 1–5 update/draw
 void UpdateLabs(float dt)
 {
     if (IsKeyPressed(KEY_SPACE))
@@ -225,9 +227,7 @@ void DrawLabs()
         GetScreenWidth(), labsHalfspace.point.y, BLUE);
 }
 
-
-// KEY PRACTICE 2: Free Body Diagram
-
+// KEY PRACTICE 2: Free Body Diagram 
 
 float fbdMass = 8.0f;
 float fbdPlaneAngle = 0.0f;
@@ -235,22 +235,17 @@ Vector2 fbdPosition = { 600, 300 };
 
 void DrawFBD()
 {
-    // Use sim.gravity.y as g
     Vector2 Fgravity = { 0, fbdMass * sim.gravity.y };
     float rad = fbdPlaneAngle * DEG2RAD;
 
-    Vector2 planeDir = { cosf(rad), sinf(rad) };
-    planeDir = Vector2Normalize(planeDir);
-
-    Vector2 normal = { -sinf(rad), cosf(rad) };
-    normal = Vector2Normalize(normal);
+    Vector2 planeDir = Vector2Normalize(Vector2{ cosf(rad), sinf(rad) });
+    Vector2 normal = Vector2Normalize(Vector2{ -sinf(rad), cosf(rad) });
 
     float perp = Vector2DotProduct(Fgravity, normal);
     Vector2 Fnormal = Vector2Scale(normal, -perp);
 
     float parallel = Vector2DotProduct(Fgravity, planeDir);
-    // Infinite friction cancels parallel component exactly
-    Vector2 Ffriction = Vector2Scale(planeDir, -parallel);
+    Vector2 Ffriction = Vector2Scale(planeDir, -parallel); // infinite friction
 
     DrawCircleV(fbdPosition, 30.0f, RED);
 
@@ -269,7 +264,6 @@ void DrawFBD()
     DrawText("Fnormal", int(FnEnd.x) + 5, int(FnEnd.y), 16, GREEN);
     DrawText("Ffriction", int(FfEnd.x) + 5, int(FfEnd.y), 16, ORANGE);
 
-    // Plane through sphere
     Vector2 p1 = Vector2Add(fbdPosition,
         Vector2Scale(planeDir, -400));
     Vector2 p2 = Vector2Add(fbdPosition,
@@ -295,7 +289,6 @@ void DrawFBDMode()
     DrawFBD();
 }
 
-
 // LAB 6: Kinetic friction, 4 spheres on a slope
 
 struct SphereBody {
@@ -304,7 +297,7 @@ struct SphereBody {
     float   vAlong;    // velocity along plane
     float   mass;
     float   radius;
-    float   friction;  
+    float   friction;  // μk
     Color   baseColor;
 
     SphereBody(float a, float m, float r, float mu, Color c)
@@ -317,15 +310,11 @@ std::vector<SphereBody> lab6Spheres;
 float lab6GroundAngle = 0.0f;
 float lab6GravityY = 200.0f;
 
-// Initialization of Lab 6 positions (called after window is created)
 void InitLab6Positions()
 {
     float rad = lab6GroundAngle * DEG2RAD;
-    Vector2 planeDir = { cosf(rad), sinf(rad) };
-    planeDir = Vector2Normalize(planeDir);
-    Vector2 normal = { -sinf(rad), cosf(rad) };
-    normal = Vector2Normalize(normal);
-
+    Vector2 planeDir = Vector2Normalize(Vector2{ cosf(rad), sinf(rad) });
+    Vector2 normal = Vector2Normalize(Vector2{ -sinf(rad), cosf(rad) });
     Vector2 mid = { GetScreenWidth() * 0.3f, 500.0f };
 
     for (auto& s : lab6Spheres) {
@@ -337,16 +326,11 @@ void InitLab6Positions()
     }
 }
 
-// Integrate constrained motion for Lab 6
 void UpdateLab6(float dt)
 {
     float rad = lab6GroundAngle * DEG2RAD;
-
-    Vector2 planeDir = { cosf(rad), sinf(rad) };
-    planeDir = Vector2Normalize(planeDir);
-    Vector2 normal = { -sinf(rad), cosf(rad) };
-    normal = Vector2Normalize(normal);
-
+    Vector2 planeDir = Vector2Normalize(Vector2{ cosf(rad), sinf(rad) });
+    Vector2 normal = Vector2Normalize(Vector2{ -sinf(rad), cosf(rad) });
     Vector2 mid = { GetScreenWidth() * 0.3f, 500.0f };
 
     const float minAlong = -200.0f;
@@ -378,7 +362,6 @@ void UpdateLab6(float dt)
         float netAlong = FgAlong + FfrictionAlong;
         float aAlong = netAlong / s.mass;
 
-        // Static equilibrium: friction >= component down-slope
         if (fabsf(FgAlong) <= frictionMag && fabsf(vAlong) < 1.0f) {
             aAlong = 0.0f;
             vAlong = 0.0f;
@@ -419,12 +402,10 @@ void DrawLab6()
         10, 130, 18, LIGHTGRAY);
 
     float rad = lab6GroundAngle * DEG2RAD;
-    Vector2 planeDir = { cosf(rad), sinf(rad) };
-    planeDir = Vector2Normalize(planeDir);
-    Vector2 normal = { -sinf(rad), cosf(rad) };
-    normal = Vector2Normalize(normal);
-
+    Vector2 planeDir = Vector2Normalize(Vector2{ cosf(rad), sinf(rad) });
+    Vector2 normal = Vector2Normalize(Vector2{ -sinf(rad), cosf(rad) });
     Vector2 mid = { GetScreenWidth() * 0.3f, 500.0f };
+
     Vector2 p1 = Vector2Add(mid, Vector2Scale(planeDir, -400.0f));
     Vector2 p2 = Vector2Add(mid, Vector2Scale(planeDir, 400.0f));
     DrawLineV(p1, p2, DARKGREEN);
@@ -472,8 +453,250 @@ void DrawLab6()
 }
 
 
-// MASTER UPDATE/DRAW
+// LAB 7: Collision response, bouncing, restitution
 
+struct Lab7Sphere {
+    Vector2 position;
+    Vector2 velocity;
+    float radius;
+    float mass;
+    float restitution;
+    Color color;
+};
+
+enum Lab7Scenario
+{
+    L7_BOUNCY = 0,
+    L7_POOL = 1,
+    L7_GALILEAN = 2
+};
+
+Lab7Scenario currentL7Scenario = L7_BOUNCY;
+
+Lab7Sphere l7A;
+Lab7Sphere l7B;
+
+float l7_massA = 2.0f;
+float l7_massB = 2.0f;
+float l7_initVelA = 0.0f;
+float l7_initVelB = 0.0f;
+float l7_restitution = 0.9f;
+float l7Gravity = 400.0f;
+float l7FloorY = 500.0f;
+
+void ResetLab7()
+{
+    l7A.mass = l7_massA;
+    l7B.mass = l7_massB;
+    l7A.restitution = l7_restitution;
+    l7B.restitution = l7_restitution;
+
+    switch (currentL7Scenario)
+    {
+    case L7_BOUNCY:
+        l7A.radius = 25.0f;
+        l7A.color = RED;
+        l7A.position = { (float)GetScreenWidth() * 0.5f, 200.0f };
+        l7A.velocity = { 0.0f, l7_initVelA }; // usually 0
+        l7B.radius = 0.0f; // unused
+        l7B.velocity = Vector2Zero();
+        break;
+
+    case L7_POOL:
+        l7A.radius = 25.0f;
+        l7B.radius = 25.0f;
+        l7A.color = RED;
+        l7B.color = BLUE;
+
+        l7A.position = { 300.0f, 400.0f };
+        l7B.position = { 430.0f, 400.0f };
+
+        l7A.velocity = { l7_initVelA, 0.0f };  // A moves toward B
+        l7B.velocity = { l7_initVelB, 0.0f };  // usually 0
+        break;
+
+    case L7_GALILEAN:
+        l7A.radius = 28.0f; // bottom heavy ball
+        l7B.radius = 16.0f; // top lighter ball
+        l7A.color = RED;
+        l7B.color = BLUE;
+
+        {
+            float x = (float)GetScreenWidth() * 0.7f;
+            l7A.position = { x, 250.0f };
+            l7B.position = { x, 250.0f - (l7A.radius + l7B.radius) };
+        }
+
+        l7A.velocity = { 0.0f, l7_initVelA };
+        l7B.velocity = { 0.0f, l7_initVelB };
+        break;
+    }
+}
+
+void UpdateLab7(float dt)
+{
+    Vector2 g = { 0.0f, l7Gravity };
+
+    switch (currentL7Scenario)
+    {
+    case L7_BOUNCY:
+        // gravity
+        l7A.velocity = Vector2Add(l7A.velocity, Vector2Scale(g, dt));
+        l7A.position = Vector2Add(l7A.position,
+            Vector2Scale(l7A.velocity, dt));
+
+        // collide with floor
+        if (l7A.position.y + l7A.radius > l7FloorY)
+        {
+            l7A.position.y = l7FloorY - l7A.radius;
+            if (l7A.velocity.y > 0.0f)
+                l7A.velocity.y = -l7A.velocity.y * l7A.restitution;
+        }
+        break;
+
+    case L7_POOL:
+    {
+        // no gravity; sliding on table
+        l7A.position = Vector2Add(l7A.position,
+            Vector2Scale(l7A.velocity, dt));
+        l7B.position = Vector2Add(l7B.position,
+            Vector2Scale(l7B.velocity, dt));
+
+        Vector2 diff = Vector2Subtract(l7B.position, l7A.position);
+        float dist = Vector2Length(diff);
+        float rsum = l7A.radius + l7B.radius;
+
+        if (dist > 0.0f && dist < rsum)
+        {
+            Vector2 normal = Vector2Scale(diff, 1.0f / dist);
+
+            float va = Vector2DotProduct(l7A.velocity, normal);
+            float vb = Vector2DotProduct(l7B.velocity, normal);
+
+            float ma = l7A.mass;
+            float mb = l7B.mass;
+            float e = l7_restitution;
+
+            float vaNew = ((ma - e * mb) * va + (1 + e) * mb * vb) / (ma + mb);
+            float vbNew = ((mb - e * ma) * vb + (1 + e) * ma * va) / (ma + mb);
+
+            l7A.velocity = Vector2Add(l7A.velocity,
+                Vector2Scale(normal, vaNew - va));
+            l7B.velocity = Vector2Add(l7B.velocity,
+                Vector2Scale(normal, vbNew - vb));
+
+            float overlap = rsum - dist;
+            Vector2 correction = Vector2Scale(normal, overlap * 0.5f);
+            l7A.position = Vector2Subtract(l7A.position, correction);
+            l7B.position = Vector2Add(l7B.position, correction);
+        }
+    }
+    break;
+
+    case L7_GALILEAN:
+    {
+        // both fall with gravity
+        l7A.velocity = Vector2Add(l7A.velocity, Vector2Scale(g, dt));
+        l7B.velocity = Vector2Add(l7B.velocity, Vector2Scale(g, dt));
+        l7A.position = Vector2Add(l7A.position,
+            Vector2Scale(l7A.velocity, dt));
+        l7B.position = Vector2Add(l7B.position,
+            Vector2Scale(l7B.velocity, dt));
+
+        // bottom ball hits floor
+        if (l7A.position.y + l7A.radius > l7FloorY)
+        {
+            l7A.position.y = l7FloorY - l7A.radius;
+            if (l7A.velocity.y > 0.0f)
+                l7A.velocity.y = -l7A.velocity.y * l7A.restitution;
+        }
+
+        // sphere–sphere collision 
+        Vector2 diff = Vector2Subtract(l7B.position, l7A.position);
+        float dist = Vector2Length(diff);
+        float rsum = l7A.radius + l7B.radius;
+        if (dist > 0.0f && dist < rsum)
+        {
+            Vector2 normal = Vector2Scale(diff, 1.0f / dist);
+
+            float va = Vector2DotProduct(l7A.velocity, normal);
+            float vb = Vector2DotProduct(l7B.velocity, normal);
+
+            float ma = l7A.mass;
+            float mb = l7B.mass;
+            float e = l7_restitution;
+
+            float vaNew = ((ma - e * mb) * va + (1 + e) * mb * vb) / (ma + mb);
+            float vbNew = ((mb - e * ma) * vb + (1 + e) * ma * va) / (ma + mb);
+
+            l7A.velocity = Vector2Add(l7A.velocity,
+                Vector2Scale(normal, vaNew - va));
+            l7B.velocity = Vector2Add(l7B.velocity,
+                Vector2Scale(normal, vbNew - vb));
+
+            float overlap = rsum - dist;
+            Vector2 correction = Vector2Scale(normal, overlap * 0.5f);
+            l7A.position = Vector2Subtract(l7A.position, correction);
+            l7B.position = Vector2Add(l7B.position, correction);
+        }
+    }
+    break;
+    }
+}
+
+void DrawLab7()
+{
+    DrawText("Lab 7: Collision Response, Bouncing, Restitution",
+        10, 130, 18, LIGHTGRAY);
+    DrawText("Z: Bouncy ball   X: Pool collision   C: Galilean cannon",
+        10, 150, 16, LIGHTGRAY);
+
+    // Scenario selection with keys (Z/X/C)
+    if (IsKeyPressed(KEY_Z)) { currentL7Scenario = L7_BOUNCY; ResetLab7(); }
+    if (IsKeyPressed(KEY_X)) { currentL7Scenario = L7_POOL;   ResetLab7(); }
+    if (IsKeyPressed(KEY_C)) { currentL7Scenario = L7_GALILEAN; ResetLab7(); }
+
+    // Sliders for masses and initial velocities
+    GuiSliderBar({ 10, 60,  220, 20 }, "Mass A",
+        TextFormat("%.1f", l7_massA),
+        &l7_massA, 0.5f, 10.0f);
+    GuiSliderBar({ 10, 90,  220, 20 }, "Mass B",
+        TextFormat("%.1f", l7_massB),
+        &l7_massB, 0.5f, 10.0f);
+    GuiSliderBar({ 10, 120, 220, 20 }, "Init Vel A",
+        TextFormat("%.1f", l7_initVelA),
+        &l7_initVelA, -600.0f, 600.0f);
+    GuiSliderBar({ 10, 150, 220, 20 }, "Init Vel B",
+        TextFormat("%.1f", l7_initVelB),
+        &l7_initVelB, -600.0f, 600.0f);
+    GuiSliderBar({ 10, 180, 220, 20 }, "Restitution e",
+        TextFormat("%.2f", l7_restitution),
+        &l7_restitution, 0.0f, 1.0f);
+
+    if (GuiButton({ 10, 210, 140, 30 }, "Reset Scenario")) {
+        ResetLab7();
+    }
+
+    // Floor line
+    DrawLine(0, (int)l7FloorY, GetScreenWidth(), (int)l7FloorY, DARKGREEN);
+
+    // Draw spheres and velocities / normals
+    auto drawSphereDebug = [](const Lab7Sphere& s)
+        {
+            if (s.radius <= 0.0f) return;
+            DrawCircleV(s.position, s.radius, s.color);
+
+            // velocity arrow
+            Vector2 vEnd = Vector2Add(s.position,
+                Vector2Scale(s.velocity, 0.1f));
+            DrawArrow(s.position, vEnd, RED);
+        };
+
+    drawSphereDebug(l7A);
+    drawSphereDebug(l7B);
+}
+
+// MASTER UPDATE / DRAW
 
 void UpdateGame()
 {
@@ -483,6 +706,8 @@ void UpdateGame()
         currentMode = MODE_LABS;
     if (IsKeyPressed(KEY_SIX))
         currentMode = MODE_LAB6;
+    if (IsKeyPressed(KEY_SEVEN))
+        currentMode = MODE_LAB7;
 
     if (IsKeyPressed(KEY_F))
         showFBD = !showFBD;
@@ -491,8 +716,9 @@ void UpdateGame()
         return;
 
     switch (currentMode) {
-    case MODE_LABS: UpdateLabs(dt); break;
-    case MODE_LAB6: UpdateLab6(dt); break;
+    case MODE_LABS: UpdateLabs(dt);  break;
+    case MODE_LAB6: UpdateLab6(dt);  break;
+    case MODE_LAB7: UpdateLab7(dt);  break;
     }
 }
 
@@ -503,7 +729,7 @@ void DrawGame()
 
     DrawText("GAME2005 – Arvin Beigi 101447957",
         10, 10, 20, LIGHTGRAY);
-    DrawText("1: Labs 1–5   6: Lab 6   F: Free Body Diagram (Key Practice 2)",
+    DrawText("1: Labs 1–5   6: Lab 6   7: Lab 7   F: Free Body Diagram",
         10, 30, 18, LIGHTGRAY);
 
     if (showFBD) {
@@ -515,6 +741,7 @@ void DrawGame()
     switch (currentMode) {
     case MODE_LABS: DrawLabs();  break;
     case MODE_LAB6: DrawLab6();  break;
+    case MODE_LAB7: DrawLab7();  break;
     }
 
     EndDrawing();
@@ -522,24 +749,21 @@ void DrawGame()
 
 // MAIN
 
-
 int main()
 {
     InitWindow(InitialWidth, InitialHeight,
-        "GAME2005 – Physics Labs & Lab 6");
+        "GAME2005 – Physics Labs, Lab 6 & Lab 7");
     SetTargetFPS(TARGET_FPS);
 
-    // Lab 6 spheres: evenly spaced along plane
-    // Red:   mass 2, μ=0.1
-    // Green: mass 2, μ=0.8
-    // Blue:  mass 8, μ=0.1
-    // Yellow:mass 8, μ=0.8
+    // Lab 6 spheres: evenly spaced along slope
     lab6Spheres.push_back(SphereBody(-120.0f, 2.0f, 20.0f, 0.1f, RED));
     lab6Spheres.push_back(SphereBody(-40.0f, 2.0f, 20.0f, 0.8f, GREEN));
     lab6Spheres.push_back(SphereBody(40.0f, 8.0f, 25.0f, 0.1f, BLUE));
     lab6Spheres.push_back(SphereBody(120.0f, 8.0f, 25.0f, 0.8f, YELLOW));
-
     InitLab6Positions();
+
+    // Lab 7 initial setup
+    ResetLab7();
 
     while (!WindowShouldClose()) {
         UpdateGame();
@@ -549,4 +773,3 @@ int main()
     CloseWindow();
     return 0;
 }
-
